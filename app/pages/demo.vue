@@ -118,7 +118,10 @@ async function runDemo(): Promise<void> {
   <UContainer class="py-10 sm:py-16">
     <div class="mx-auto max-w-4xl space-y-8">
       <div class="space-y-4">
-        <UBadge color="primary" variant="subtle">
+        <UBadge
+          color="primary"
+          variant="subtle"
+        >
           Private computation demo
         </UBadge>
         <h1 class="text-4xl font-semibold tracking-tight text-highlighted sm:text-5xl">
@@ -203,7 +206,10 @@ async function runDemo(): Promise<void> {
         </div>
       </UCard>
 
-      <div class="flex items-center gap-2 text-sm text-muted" aria-live="polite">
+      <div
+        class="flex items-center gap-2 text-sm text-muted"
+        aria-live="polite"
+      >
         <UIcon
           :name="busy ? 'i-lucide-loader-circle' : 'i-lucide-info'"
           :class="{ 'animate-spin': busy }"

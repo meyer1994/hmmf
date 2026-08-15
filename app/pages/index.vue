@@ -64,7 +64,6 @@ const requestedParameters = shallowRef<HEParameterDescriptor | null>(null)
 const requestedExecution = shallowRef<ExecuteRequest | null>(null)
 
 const {
-  data: sessionData,
   status: sessionRequestStatus,
   execute: initializeSession,
   clear: clearSessionData
