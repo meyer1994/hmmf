@@ -18,6 +18,7 @@ export default defineNuxtConfig({
     cloudflare: {
       deployConfig: true,
       wrangler: {
+        name: 'hmmf',
         r2_buckets: [
           {
             binding: 'HE_OBJECTS',
