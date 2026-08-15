@@ -1,5 +1,8 @@
 import jsonLogic from 'json-logic-js'
-import type { Ciphertext, Evaluator, RelinKeys, SEALContext } from 'node-seal'
+import type { CipherText } from 'node-seal/implementation/cipher-text'
+import type { Context } from 'node-seal/implementation/context'
+import type { Evaluator } from 'node-seal/implementation/evaluator'
+import type { RelinKeys } from 'node-seal/implementation/relin-keys'
 import type { HEParameterDescriptor } from '~~/shared/he'
 import type { getSeal } from './seal'
 
@@ -22,11 +25,11 @@ type CompiledLogic
  * operations. This was done to make this interoperable with json-logic-js.
  *
  * @property {HEEngine} engine - The engine that created this value.
- * @property {Ciphertext} cypher - The ciphertext representing this value.
+ * @property {CipherText} cypher - The ciphertext representing this value.
  */
 interface Value {
   engine: HEEngine
-  cypher: Ciphertext
+  cypher: CipherText
 }
 
 jsonLogic.add_operation('he_add', (left: Value, right: Value) => left.engine.add(left, right))
@@ -35,15 +38,15 @@ jsonLogic.add_operation('he_mul', (left: Value, right: Value) => left.engine.mul
 
 export class HEEngine {
   private readonly seal: Awaited<ReturnType<typeof getSeal>>
-  private readonly context: SEALContext
+  private readonly context: Context
   private readonly evaluator: Evaluator
-  private readonly ciphertexts = new Set<Ciphertext>()
+  private readonly ciphertexts = new Set<CipherText>()
   private relinKeys: RelinKeys | null = null
 
   constructor(seal: Awaited<ReturnType<typeof getSeal>>, props: HEParameterDescriptor) {
     this.seal = seal
 
-    const parms = new seal.EncryptionParameters(seal.SchemeType.bfv)
+    const parms = seal.EncryptionParameters(seal.SchemeType.bfv)
 
     const coeffModulus = seal.CoeffModulus.Create(
       props.polyModulusDegree,
@@ -58,8 +61,8 @@ export class HEEngine {
     parms.setPolyModulusDegree(props.polyModulusDegree)
     parms.setCoeffModulus(coeffModulus)
     parms.setPlainModulus(plainModulus)
-    this.context = new seal.SEALContext(parms, true, seal.SecLevelType.tc128)
-    this.evaluator = new seal.Evaluator(this.context)
+    this.context = seal.Context(parms, true, seal.SecurityLevel.tc128)
+    this.evaluator = seal.Evaluator(this.context)
 
     plainModulus.delete()
     coeffModulus.delete()
@@ -67,20 +70,20 @@ export class HEEngine {
   }
 
   load(bytes: Uint8Array): Value {
-    const ciphertext = new this.seal.Ciphertext()
-    ciphertext.loadFromArray(this.context, Uint8Array.from(bytes))
+    const ciphertext = this.seal.CipherText()
+    ciphertext.loadArray(this.context, Uint8Array.from(bytes))
     this.ciphertexts.add(ciphertext)
     return { engine: this, cypher: ciphertext }
   }
 
   loadRelinKeys(bytes: Uint8Array): void {
-    this.relinKeys = new this.seal.RelinKeys()
-    this.relinKeys.loadFromArray(this.context, Uint8Array.from(bytes))
+    this.relinKeys = this.seal.RelinKeys()
+    this.relinKeys.loadArray(this.context, Uint8Array.from(bytes))
   }
 
   evaluate(logic: Logic, data: Record<string, Value>): Uint8Array {
     const result = jsonLogic.apply(compile(logic) as never, data) as Value
-    return new Uint8Array(result.cypher.saveToArray(this.seal.ComprModeType.zlib))
+    return new Uint8Array(result.cypher.saveArray(this.seal.ComprModeType.zlib))
   }
 
   dispose(): void {
@@ -101,12 +104,12 @@ export class HEEngine {
   multiply(left: Value, right: Value): Value {
     return this.calculate((result) => {
       this.evaluator.multiply(left.cypher, right.cypher, result)
-      this.evaluator.relinearizeInplace(result, this.relinKeys!)
+      this.evaluator.relinearize(result, this.relinKeys!, result)
     })
   }
 
-  private calculate(operation: (result: Ciphertext) => void): Value {
-    const ciphertext = new this.seal.Ciphertext()
+  private calculate(operation: (result: CipherText) => void): Value {
+    const ciphertext = this.seal.CipherText()
     operation(ciphertext)
     this.ciphertexts.add(ciphertext)
     return { engine: this, cypher: ciphertext }

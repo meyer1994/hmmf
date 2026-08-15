@@ -16,7 +16,7 @@
     "@iconify-json/simple-icons": "^1.2.93",
     "@nuxt/ui": "^4.10.0",
     "json-logic-js": "^2.0.5",
-    "node-seal": "^7.0.0",
+    "node-seal": "^5.1.6",
     "nuxt": "^4.5.2",
     "tailwindcss": "^4.3.3",
     "zod": "^4.4.3"

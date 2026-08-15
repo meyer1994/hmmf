@@ -1,11 +1,9 @@
-import type {
-  KeyGenerator,
-  MainModule,
-  PublicKey,
-  RelinKeys,
-  SecretKey
-} from 'node-seal'
-import SEAL from 'node-seal/throws'
+import type { KeyGenerator } from 'node-seal/implementation/key-generator'
+import type { PublicKey } from 'node-seal/implementation/public-key'
+import type { RelinKeys } from 'node-seal/implementation/relin-keys'
+import type { SecretKey } from 'node-seal/implementation/secret-key'
+import type { SEALLibrary } from 'node-seal/implementation/seal'
+import SEAL from 'node-seal/throws_wasm_web_es'
 
 import {
   parameterHeaders,
@@ -21,7 +19,7 @@ const sealPromise = SEAL()
 
 interface ClientSession {
   createdAt: string
-  seal: MainModule
+  seal: SEALLibrary
   client: HEClient
   keyGenerator: KeyGenerator
   secretKey: SecretKey
@@ -71,7 +69,7 @@ export function useHEClient() {
     dispose()
     const seal = await sealPromise
     const client = new HEClient({ seal, parameters }).init()
-    const keyGenerator = new seal.KeyGenerator(client.context)
+    const keyGenerator = seal.KeyGenerator(client.context)
     const secretKey = keyGenerator.secretKey()
     const publicKey = keyGenerator.createPublicKey()
     const relinKeys = keyGenerator.createRelinKeys()
@@ -112,7 +110,7 @@ export function useHEClient() {
   async function execute(request: ExecuteRequest): Promise<string> {
     const active = requireSession()
     const relinKeys = encodeBase64(
-      bytesFrom(active.relinKeys.saveToArray(active.seal.ComprModeType.zlib))
+      bytesFrom(active.relinKeys.saveArray(active.seal.ComprModeType.zlib))
     )
 
     const body = await $fetch<ExecuteResponse>('/api/v1/execute', {
@@ -138,9 +136,9 @@ export function useHEClient() {
   function getDebugSession() {
     if (!session) return null
 
-    const secretKey = bytesFrom(session.secretKey.saveToArray(session.seal.ComprModeType.zlib))
-    const publicKey = bytesFrom(session.publicKey.saveToArray(session.seal.ComprModeType.zlib))
-    const relinKeys = bytesFrom(session.relinKeys.saveToArray(session.seal.ComprModeType.zlib))
+    const secretKey = bytesFrom(session.secretKey.saveArray(session.seal.ComprModeType.zlib))
+    const publicKey = bytesFrom(session.publicKey.saveArray(session.seal.ComprModeType.zlib))
+    const relinKeys = bytesFrom(session.relinKeys.saveArray(session.seal.ComprModeType.zlib))
 
     return {
       createdAt: session.createdAt,

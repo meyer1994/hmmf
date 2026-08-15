@@ -35,7 +35,7 @@ export default defineNuxtConfig({
     },
 
     routeRules: {
-      '/**/*.wasm': {
+      '/_nuxt/seal_throws.wasm': {
         headers: { 'Content-Type': 'application/wasm' }
       }
     },
