@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "deepwiki": {
+      "url": "https://mcp.deepwiki.com/mcp",
+      "protocolVersion": "auto",
+      "directTools": true
+    },
+    "nuxt": {
+      "url": "https://nuxt.com/mcp",
+      "protocolVersion": "auto",
+      "directTools": true
+    },
+    "nuxt-ui": {
+      "url": "https://ui.nuxt.com/mcp",
+      "protocolVersion": "auto",
+      "directTools": true
+    }
+  }
+}
