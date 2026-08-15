@@ -21,9 +21,7 @@ export default defineEventHandler(async (event) => {
       [HE_HEADERS.scheme]: metadata.scheme,
       [HE_HEADERS.polyModulusDegree]: String(metadata.polyModulusDegree),
       [HE_HEADERS.coeffModulusBits]: metadata.coeffModulusBits.join(','),
-      [HE_HEADERS.plainModulusBits]: String(metadata.plainModulusBits),
-      [HE_HEADERS.keyFingerprint]: metadata.keyFingerprint,
-      [HE_HEADERS.contextFingerprint]: metadata.contextFingerprint
+      [HE_HEADERS.plainModulusBits]: String(metadata.plainModulusBits)
     }
   })
 })

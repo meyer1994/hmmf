@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { z } from 'zod'
 import type { ExecuteRequest, HEParameterDescriptor } from '~~/shared/he'
 
 useSeoMeta({
@@ -12,182 +13,149 @@ interface PlaygroundInput {
   objectId: string
 }
 
+const contextSchema = z.object({
+  degree: z.union([z.literal(4096), z.literal(8192)]),
+  coeffBits: z.string().regex(/^\d+(\s*,\s*\d+)*$/, 'Use comma-separated positive integers.'),
+  plainBits: z.number().int().min(2).max(30)
+})
+
+const inputSchema = z.object({
+  name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/, 'Use a letter followed by letters, numbers, or underscores.'),
+  value: z.string().regex(/^-?\d+$/, 'Enter an integer.')
+})
+
+const inputsSchema = z.object({ inputs: z.array(inputSchema).min(1) })
+
+const executionSchema = z.object({
+  expression: z.string().refine((value) => {
+    try {
+      JSON.parse(value)
+      return true
+    } catch {
+      return false
+    }
+  }, 'Expression must be valid JSON.')
+})
+
 const he = useHEClient()
-const degree = ref<4096 | 8192>(4096)
-const coeffBits = ref('36,36,37')
-const plainBits = ref(20)
-const inputs = ref<PlaygroundInput[]>([
-  { name: 'a', value: '10', objectId: '' },
-  { name: 'b', value: '17', objectId: '' }
-])
-const expression = ref(JSON.stringify({ '*': [{ var: 'a' }, { var: 'b' }] }, null, 2))
-const keyFingerprint = ref('')
-const contextFingerprint = ref('')
+
+const contextForm = reactive({
+  degree: 4096 as 4096 | 8192,
+  coeffBits: '36,36,37',
+  plainBits: 20
+})
+
+const inputsForm = reactive<{ inputs: PlaygroundInput[] }>({
+  inputs: [
+    { name: 'a', value: '10', objectId: '' },
+    { name: 'b', value: '17', objectId: '' }
+  ]
+})
+
+const executionForm = reactive({
+  expression: JSON.stringify({ '*': [{ var: 'a' }, { var: 'b' }] }, null, 2)
+})
+
 const resultId = ref('')
 const decryptedResult = ref('')
 const status = ref('No active key session.')
-const errorMessage = ref('')
-const manualBusy = ref(false)
 const debugSession = shallowRef<ReturnType<typeof he.getDebugSession>>(null)
 const requestedParameters = shallowRef<HEParameterDescriptor | null>(null)
 const requestedExecution = shallowRef<ExecuteRequest | null>(null)
 
 const {
   data: sessionData,
-  error: sessionError,
   status: sessionRequestStatus,
   execute: initializeSession,
   clear: clearSessionData
-} = await useAsyncData('he-session', async () => {
-  if (!requestedParameters.value) throw new Error('Encryption parameters are required.')
-  return he.initialize(requestedParameters.value)
-}, { immediate: false, server: false })
+} = await useAsyncData('he-session',
+  async () => {
+    if (!requestedParameters.value) throw new Error('Encryption parameters are required.')
+    return he.initialize(requestedParameters.value)
+  },
+  { immediate: false }
+)
 
 const {
   data: executionData,
-  error: executionError,
   status: executionRequestStatus,
   execute: runExecution,
   clear: clearExecutionData
-} = await useAsyncData('he-execution', async () => {
-  if (!requestedExecution.value) throw new Error('An execution request is required.')
-  const id = await he.execute(requestedExecution.value)
-  return {
-    id,
-    decrypted: String(await he.downloadAndDecrypt(id))
-  }
-}, { immediate: false, server: false })
+} = await useAsyncData('he-execution',
+  async () => {
+    if (!requestedExecution.value) throw new Error('An execution request is required.')
+    const id = await he.execute(requestedExecution.value)
+    const decrypted = await he.downloadAndDecrypt(id)
+    return { id, decrypted: String(decrypted) }
+  },
+  { immediate: false }
+)
 
 clearSessionData()
 clearExecutionData()
 
-const busy = computed(() => manualBusy.value
-  || sessionRequestStatus.value === 'pending'
-  || executionRequestStatus.value === 'pending')
-
 function parameters(): HEParameterDescriptor {
   return {
     scheme: 'BFV',
-    polyModulusDegree: degree.value,
-    coeffModulusBits: coeffBits.value.split(',').map(value => Number(value.trim())),
-    plainModulusBits: Number(plainBits.value)
-  }
-}
-
-function formatError(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'object' && error && 'message' in error) {
-    const message = error.message
-    return Array.isArray(message) ? message.join(': ') : String(message)
-  }
-  return String(error)
-}
-
-async function runAction(action: () => Promise<void>): Promise<void> {
-  manualBusy.value = true
-  errorMessage.value = ''
-  try {
-    await action()
-  } catch (error) {
-    errorMessage.value = formatError(error)
-    status.value = 'Action failed.'
-  } finally {
-    manualBusy.value = false
+    polyModulusDegree: contextForm.degree,
+    coeffModulusBits: contextForm.coeffBits.split(',').map(value => Number(value.trim())),
+    plainModulusBits: contextForm.plainBits
   }
 }
 
 async function generateSession(): Promise<void> {
-  await runAction(async () => {
-    status.value = 'Generating BFV keys in your browser…'
-    requestedParameters.value = parameters()
-    clearSessionData()
-    await initializeSession()
-    if (sessionError.value) throw sessionError.value
-
-    const session = sessionData.value!
-    keyFingerprint.value = session.descriptor.keyFingerprint
-    contextFingerprint.value = session.contextFingerprint
-    resultId.value = ''
-    decryptedResult.value = ''
-    inputs.value.forEach(input => input.objectId = '')
-    debugSession.value = he.getDebugSession()
-    status.value = 'Key session ready. The secret key exists only in this tab.'
-  })
-}
-
-function resetSession(): void {
-  he.dispose()
+  status.value = 'Generating BFV keys in your browser…'
+  requestedParameters.value = parameters()
   clearSessionData()
-  clearExecutionData()
-  requestedParameters.value = null
-  requestedExecution.value = null
-  keyFingerprint.value = ''
-  contextFingerprint.value = ''
+  await initializeSession()
+
   resultId.value = ''
   decryptedResult.value = ''
-  debugSession.value = null
-  inputs.value.forEach(input => input.objectId = '')
-  status.value = 'Session reset. Previously uploaded values cannot be decrypted here.'
-  errorMessage.value = ''
+  inputsForm.inputs.forEach(input => input.objectId = '')
+  debugSession.value = he.getDebugSession()
+  status.value = 'Key session ready. The secret key exists only in this tab.'
 }
 
 async function uploadInputs(): Promise<void> {
-  await runAction(async () => {
-    status.value = 'Encrypting and uploading inputs…'
-    for (const input of inputs.value) {
-      if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(input.name)) {
-        throw new Error(`Invalid input name: ${input.name}`)
-      }
-      input.objectId = (await he.upload(input.value)).id
-    }
-    clearExecutionData()
-    resultId.value = ''
-    decryptedResult.value = ''
-    status.value = 'Encrypted inputs uploaded.'
-  })
+  status.value = 'Encrypting and uploading inputs…'
+  for (const input of inputsForm.inputs) {
+    input.objectId = (await he.upload(input.value)).id
+  }
+  clearExecutionData()
+  resultId.value = ''
+  decryptedResult.value = ''
+  status.value = 'Encrypted inputs uploaded.'
 }
 
 async function executeExpression(): Promise<void> {
-  await runAction(async () => {
-    const inputMap = Object.fromEntries(inputs.value.map((input) => {
-      if (!input.objectId) throw new Error(`Upload input ${input.name} before executing.`)
-      return [input.name, input.objectId]
-    }))
+  const inputMap = Object.fromEntries(inputsForm.inputs.map((input) => {
+    if (!input.objectId) throw new Error(`Upload input ${input.name} before executing.`)
+    return [input.name, input.objectId]
+  }))
 
-    let logic: unknown
-    try {
-      logic = JSON.parse(expression.value)
-    } catch {
-      throw new Error('Expression must be valid JSON.')
-    }
+  const logic = JSON.parse(executionForm.expression)
+  requestedExecution.value = { inputs: inputMap, logic }
+  clearExecutionData()
+  status.value = 'Evaluating and decrypting the result…'
+  await runExecution()
 
-    requestedExecution.value = { inputs: inputMap, logic }
-    clearExecutionData()
-    status.value = 'Evaluating and decrypting the result…'
-    await runExecution()
-    if (executionError.value) throw executionError.value
-
-    resultId.value = executionData.value!.id
-    decryptedResult.value = executionData.value!.decrypted
-    status.value = 'Result decrypted locally.'
-  })
+  resultId.value = executionData.value!.id
+  decryptedResult.value = executionData.value!.decrypted
+  status.value = 'Result decrypted locally.'
 }
 
 async function decryptResult(): Promise<void> {
-  await runAction(async () => {
-    if (!resultId.value) throw new Error('Execute an expression first.')
-    status.value = 'Downloading and decrypting result in your browser…'
-    decryptedResult.value = String(await he.downloadAndDecrypt(resultId.value))
-    status.value = 'Result decrypted locally.'
-  })
+  status.value = 'Downloading and decrypting result in your browser…'
+  decryptedResult.value = String(await he.downloadAndDecrypt(resultId.value))
+  status.value = 'Result decrypted locally.'
 }
 
 function addInput(): void {
-  inputs.value.push({ name: `value${inputs.value.length + 1}`, value: '0', objectId: '' })
+  inputsForm.inputs.push({ name: `value${inputsForm.inputs.length + 1}`, value: '0', objectId: '' })
 }
 
 function removeInput(index: number): void {
-  if (inputs.value.length > 1) inputs.value.splice(index, 1)
+  if (inputsForm.inputs.length > 1) inputsForm.inputs.splice(index, 1)
 }
 </script>
 
@@ -231,24 +199,29 @@ function removeInput(index: number): void {
             </div>
           </template>
 
-          <div class="space-y-4">
+          <UForm
+            :schema="contextSchema"
+            :state="contextForm"
+            class="space-y-4"
+            @submit="generateSession"
+          >
             <UFormField label="Polynomial modulus degree">
               <USelect
-                v-model="degree"
+                v-model="contextForm.degree"
                 :items="[4096, 8192]"
                 class="w-full"
               />
             </UFormField>
             <UFormField label="Coefficient modulus bit sizes">
               <UInput
-                v-model="coeffBits"
+                v-model="contextForm.coeffBits"
                 class="w-full"
                 placeholder="36,36,37"
               />
             </UFormField>
             <UFormField label="Plain modulus bit size">
               <UInput
-                v-model.number="plainBits"
+                v-model.number="contextForm.plainBits"
                 type="number"
                 :min="2"
                 :max="30"
@@ -258,44 +231,41 @@ function removeInput(index: number): void {
 
             <div class="flex flex-wrap gap-2 pt-2">
               <UButton
-                :loading="busy"
+                :loading="sessionRequestStatus === 'pending'"
                 icon="i-lucide-key"
-                @click="generateSession"
+                type="submit"
               >
                 Generate session
               </UButton>
-              <UButton
-                color="neutral"
-                variant="outline"
-                :disabled="busy || !keyFingerprint"
-                @click="resetSession"
-              >
-                Reset
-              </UButton>
             </div>
 
-            <dl
-              v-if="keyFingerprint"
-              class="space-y-3 rounded-lg bg-elevated p-4 text-xs"
-            >
+            <dl class="grid grid-cols-3 gap-3 rounded-lg bg-elevated p-4 text-xs">
               <div>
-                <dt class="font-medium text-muted">
-                  Context fingerprint
+                <dt class="text-muted">
+                  Polynomial degree
                 </dt>
-                <dd class="mt-1 break-all font-mono text-highlighted">
-                  {{ contextFingerprint }}
+                <dd class="mt-1 font-mono text-highlighted">
+                  {{ contextForm.degree }}
                 </dd>
               </div>
               <div>
-                <dt class="font-medium text-muted">
-                  Key fingerprint
+                <dt class="text-muted">
+                  Coefficient bits
                 </dt>
                 <dd class="mt-1 break-all font-mono text-highlighted">
-                  {{ keyFingerprint }}
+                  {{ contextForm.coeffBits }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted">
+                  Plain bits
+                </dt>
+                <dd class="mt-1 font-mono text-highlighted">
+                  {{ contextForm.plainBits }}
                 </dd>
               </div>
             </dl>
-          </div>
+          </UForm>
         </UCard>
 
         <UCard>
@@ -321,19 +291,30 @@ function removeInput(index: number): void {
             </div>
           </template>
 
-          <div class="space-y-4">
+          <UForm
+            :schema="inputsSchema"
+            :state="inputsForm"
+            class="space-y-4"
+            @submit="uploadInputs"
+          >
             <div
-              v-for="(input, index) in inputs"
+              v-for="(input, index) in inputsForm.inputs"
               :key="index"
               class="grid gap-3 rounded-lg border border-default p-4 sm:grid-cols-[1fr_1fr_auto]"
             >
-              <UFormField label="Name">
+              <UFormField
+                label="Name"
+                :name="`inputs.${index}.name`"
+              >
                 <UInput
                   v-model="input.name"
                   class="w-full"
                 />
               </UFormField>
-              <UFormField label="Integer value">
+              <UFormField
+                label="Integer value"
+                :name="`inputs.${index}.value`"
+              >
                 <UInput
                   v-model="input.value"
                   class="w-full"
@@ -345,7 +326,8 @@ function removeInput(index: number): void {
                 color="neutral"
                 variant="ghost"
                 icon="i-lucide-trash-2"
-                :disabled="inputs.length === 1"
+                type="button"
+                :disabled="inputsForm.inputs.length === 1"
                 aria-label="Remove input"
                 @click="removeInput(index)"
               />
@@ -357,14 +339,13 @@ function removeInput(index: number): void {
               </p>
             </div>
             <UButton
-              :loading="busy"
-              :disabled="!keyFingerprint"
+              :loading="sessionRequestStatus === 'pending'"
+              type="submit"
               icon="i-lucide-lock-keyhole"
-              @click="uploadInputs"
             >
               Encrypt and upload
             </UButton>
-          </div>
+          </UForm>
         </UCard>
       </div>
 
@@ -380,10 +361,15 @@ function removeInput(index: number): void {
           </div>
         </template>
 
-        <div class="grid gap-6 lg:grid-cols-2">
+        <UForm
+          :schema="executionSchema"
+          :state="executionForm"
+          class="grid gap-6 lg:grid-cols-2"
+          @submit="executeExpression"
+        >
           <UFormField label="Expression">
             <UTextarea
-              v-model="expression"
+              v-model="executionForm.expression"
               :rows="14"
               autoresize
               class="w-full font-mono"
@@ -412,18 +398,17 @@ function removeInput(index: number): void {
 
             <div class="flex flex-wrap gap-2">
               <UButton
-                :loading="busy"
-                :disabled="!keyFingerprint"
+                :loading="executionRequestStatus === 'pending'"
+                type="submit"
                 icon="i-lucide-cpu"
-                @click="executeExpression"
               >
                 Execute
               </UButton>
               <UButton
                 color="neutral"
                 variant="outline"
-                :loading="busy"
-                :disabled="!resultId"
+                :loading="executionRequestStatus === 'pending'"
+                type="button"
                 icon="i-lucide-unlock"
                 @click="decryptResult"
               >
@@ -431,24 +416,16 @@ function removeInput(index: number): void {
               </UButton>
             </div>
           </div>
-        </div>
+        </UForm>
       </UCard>
 
-      <UAlert
-        v-if="errorMessage"
-        color="error"
-        variant="subtle"
-        icon="i-lucide-circle-alert"
-        title="Request failed"
-        :description="errorMessage"
-      />
       <div
         class="flex items-center gap-2 text-sm text-muted"
         aria-live="polite"
       >
         <UIcon
-          :name="busy ? 'i-lucide-loader-circle' : 'i-lucide-info'"
-          :class="{ 'animate-spin': busy }"
+          :name="sessionRequestStatus === 'pending' || executionRequestStatus === 'pending' ? 'i-lucide-loader-circle' : 'i-lucide-info'"
+          :class="{ 'animate-spin': sessionRequestStatus === 'pending' || executionRequestStatus === 'pending' }"
         />
         <span>{{ status }}</span>
       </div>
@@ -516,22 +493,6 @@ function removeInput(index: number): void {
               </dt>
               <dd class="mt-1 font-mono text-highlighted">
                 {{ debugSession.descriptor.plainModulusBits }}
-              </dd>
-            </div>
-            <div>
-              <dt class="text-muted">
-                Context fingerprint
-              </dt>
-              <dd class="mt-1 break-all font-mono text-xs text-highlighted">
-                {{ debugSession.contextFingerprint }}
-              </dd>
-            </div>
-            <div class="sm:col-span-2 lg:col-span-3">
-              <dt class="text-muted">
-                Public-key fingerprint
-              </dt>
-              <dd class="mt-1 break-all font-mono text-xs text-highlighted">
-                {{ debugSession.descriptor.keyFingerprint }}
               </dd>
             </div>
           </dl>

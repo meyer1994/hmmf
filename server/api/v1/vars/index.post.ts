@@ -2,8 +2,6 @@ import { getRequestHeader, readRawBody, setResponseStatus } from 'h3'
 import { z } from 'zod'
 import {
   HE_HEADERS,
-  canonicalizeParameters,
-  sha256Fingerprint,
   type StoredCiphertextMetadata
 } from '~~/shared/he'
 
@@ -13,8 +11,7 @@ const headersSchema = z.object({
   coeffModulusBits: z.string()
     .transform(value => value.split(',').map(Number))
     .pipe(z.array(z.number().int()).nonempty()),
-  plainModulusBits: z.coerce.number().int().min(2).max(30),
-  keyFingerprint: z.string().regex(/^sha256:[a-f0-9]{64}$/)
+  plainModulusBits: z.coerce.number().int().min(2).max(30)
 })
 
 export default defineEventHandler(async (event) => {
@@ -22,8 +19,7 @@ export default defineEventHandler(async (event) => {
     scheme: getRequestHeader(event, HE_HEADERS.scheme),
     polyModulusDegree: getRequestHeader(event, HE_HEADERS.polyModulusDegree),
     coeffModulusBits: getRequestHeader(event, HE_HEADERS.coeffModulusBits),
-    plainModulusBits: getRequestHeader(event, HE_HEADERS.plainModulusBits),
-    keyFingerprint: getRequestHeader(event, HE_HEADERS.keyFingerprint)
+    plainModulusBits: getRequestHeader(event, HE_HEADERS.plainModulusBits)
   })
 
   const body = await readRawBody(event, false)
@@ -31,14 +27,12 @@ export default defineEventHandler(async (event) => {
   const ciphertext = new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
 
   const id = crypto.randomUUID()
-  const contextFingerprint = await sha256Fingerprint(canonicalizeParameters(parameters))
 
   const storage = useStorage('he')
   await storage.setItemRaw(`objects:${id}:ciphertext.bin`, ciphertext)
   await storage.setItem(`objects:${id}:metadata.json`, {
     id,
     ...parameters,
-    contextFingerprint,
     byteLength: ciphertext.byteLength,
     createdAt: new Date().toISOString()
   })
@@ -46,8 +40,6 @@ export default defineEventHandler(async (event) => {
   setResponseStatus(event, 201)
   return {
     id,
-    scheme: parameters.scheme,
-    contextFingerprint,
-    keyFingerprint: parameters.keyFingerprint
+    scheme: parameters.scheme
   }
 })
