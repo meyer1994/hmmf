@@ -2,7 +2,7 @@
 
 HMMF is a Nuxt/Nitro homomorphic-compute playground. The browser generates a BFV key session with `node-seal`, encrypts integer inputs, and decrypts the result. The API resolves immutable ciphertext objects from Nitro storage and evaluates an allowlisted JSON Logic expression without receiving the secret key.
 
-Supported public operators are `var`, `+`, `-`, and `*`. Multiplication sends request-scoped relinearization keys; neither public nor evaluation keys are persisted.
+Supported public operators are `var`, `+`, `-`, and `*`. Each execution sends request-scoped relinearization keys; neither public nor evaluation keys are persisted.
 
 ## Setup
 
@@ -13,18 +13,33 @@ pnpm dev
 
 Local development uses filesystem-backed Nitro storage under `.data/he`. The playground is available at `http://localhost:3000`.
 
-## Cloudflare configuration
+## Cloudflare Workers
 
-The production Nitro preset targets Cloudflare Workers. Before deploying, create the R2 bucket yourself and make sure this binding in `wrangler.jsonc` points at it:
+The production Nitro preset targets Cloudflare Workers and uses an R2 bucket for ciphertext storage. The configuration uses the `cloudflare_module` preset and a compatibility date supported by Cloudflare Workers.
 
-```json
-{
-  "binding": "HE_OBJECTS",
-  "bucket_name": "hmmf-he-objects"
-}
+Create the R2 bucket, then set its name in `nuxt.config.ts` under the `HE_OBJECTS` binding:
+
+```ts
+export default defineNuxtConfig({
+  compatibilityDate: '2025-05-15',
+  nitro: {
+    preset: 'cloudflare_module',
+    cloudflare: {
+      deployConfig: true,
+      wrangler: {
+        r2_buckets: [
+          {
+            binding: 'HE_OBJECTS',
+            bucket_name: 'hmmf'
+          }
+        ]
+      }
+    }
+  }
+})
 ```
 
-Nitro mounts that binding as `useStorage('he')`. Change the bucket name in `wrangler.jsonc` if you use a different name. This repository does not create or deploy Cloudflare resources.
+Nitro mounts that binding as `useStorage('he')`. The generated `wrangler.jsonc` contains the same R2 binding. This repository does not create Cloudflare resources.
 
 Build the Worker bundle with:
 
@@ -46,9 +61,8 @@ All endpoints use capability-style UUID object IDs and currently have no authent
 - `X-HE-Poly-Modulus-Degree: 4096` or `8192`
 - `X-HE-Coeff-Modulus-Bits: 36,36,37`
 - `X-HE-Plain-Modulus-Bits: 20`
-- `X-HE-Key-Fingerprint: sha256:<public-key-hash>`
 
-The response contains the immutable object ID and its context/key fingerprints.
+The response contains the immutable object ID.
 
 ### Execute an expression
 
@@ -69,7 +83,7 @@ The response contains the immutable object ID and its context/key fingerprints.
 }
 ```
 
-Send the same HE parameter headers used for upload. When the expression contains `*`, add `"relinKeys": "<base64 relinearization keys>"` to the body. Omit it for addition and subtraction. The response is:
+Send the same HE parameter headers used for upload and include the base64-encoded relinearization keys in the request body. The response is:
 
 ```json
 {
@@ -83,7 +97,7 @@ Zod validates the request shape and recursive operator allowlist before the publ
 
 ### Download a ciphertext
 
-`GET /api/v1/vars/:id` returns `application/octet-stream` and HE metadata headers. Decryption remains client-side.
+`GET /api/v1/vars/:id` returns `application/octet-stream` and the HE parameter headers. Decryption remains client-side. If the parameters or key session do not match, decryption fails rather than being server-validated by a fingerprint.
 
 ## Verification
 

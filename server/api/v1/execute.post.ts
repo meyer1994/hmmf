@@ -1,7 +1,8 @@
 import { getRequestHeader, setResponseStatus } from 'h3'
 import { z } from 'zod'
-import { HEEngine, type Logic } from '~~/server/utils/he-engine'
-import { getServerSEAL } from '~~/server/utils/seal'
+import { HEEngine, type Logic } from '~~/server/utils/engine'
+
+import { getSeal } from '~~/server/utils/seal'
 import { HE_HEADERS } from '~~/shared/he'
 
 const headersSchema = z.object({
@@ -27,40 +28,53 @@ const executeSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const parameters = headersSchema.parse({
-    scheme: getRequestHeader(event, HE_HEADERS.scheme),
-    polyModulusDegree: getRequestHeader(event, HE_HEADERS.polyModulusDegree),
-    coeffModulusBits: getRequestHeader(event, HE_HEADERS.coeffModulusBits),
-    plainModulusBits: getRequestHeader(event, HE_HEADERS.plainModulusBits)
-  })
+  let engine: HEEngine | undefined
 
-  const request = await readValidatedBody(event, executeSchema.parse)
-
-  const engine = new HEEngine(await getServerSEAL(), parameters)
   try {
+    const parameters = headersSchema.parse({
+      scheme: getRequestHeader(event, HE_HEADERS.scheme),
+      polyModulusDegree: getRequestHeader(event, HE_HEADERS.polyModulusDegree),
+      coeffModulusBits: getRequestHeader(event, HE_HEADERS.coeffModulusBits),
+      plainModulusBits: getRequestHeader(event, HE_HEADERS.plainModulusBits)
+    })
+
+    const request = await readValidatedBody(event, executeSchema.parse)
+    console.log('[execute] request received', {
+      parameters,
+      inputCount: Object.keys(request.inputs).length,
+      hasRelinKeys: Boolean(request.relinKeys)
+    })
+
+    engine = new HEEngine(await getSeal(), parameters)
     if (request.relinKeys) engine.loadRelinKeys(decodeBase64(request.relinKeys))
 
     const storage = useStorage('he')
     const entries = await Promise.all(Object.entries(request.inputs).map(async ([name, id]) => {
-      const bytes = (await storage.getItemRaw(`objects:${id}:ciphertext.bin`, { type: 'bytes' })) as Uint8Array
-      return [name, engine.load(bytes)] as const
+      const bytes = (await storage.getItemRaw(`vars:${id}:ciphertext.bin`, { type: 'bytes' })) as Uint8Array
+      return [name, engine!.load(bytes)] as const
     }))
+    console.log('[execute] inputs loaded', { count: entries.length })
 
     const id = crypto.randomUUID()
     const resultBytes = engine.evaluate(request.logic, Object.fromEntries(entries))
+    console.log('[execute] expression evaluated', { id, byteLength: resultBytes.byteLength })
 
-    await storage.setItemRaw(`objects:${id}:ciphertext.bin`, resultBytes)
-    await storage.setItem(`objects:${id}:metadata.json`, {
+    await storage.setItemRaw(`vars:${id}:ciphertext.bin`, resultBytes)
+    await storage.setMeta(`vars:${id}:ciphertext.bin`, {
       id,
       ...parameters,
       byteLength: resultBytes.byteLength,
       createdAt: new Date().toISOString()
     })
 
+    console.log('[execute] result stored', { id })
     setResponseStatus(event, 201)
     return { result: { id } }
+  } catch (error) {
+    console.log('[execute] request failed', error)
+    throw error
   } finally {
-    engine.dispose()
+    engine?.dispose()
   }
 })
 

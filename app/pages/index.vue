@@ -118,10 +118,12 @@ async function generateSession(): Promise<void> {
 
 async function uploadInputs(): Promise<void> {
   status.value = 'Encrypting and uploading inputs…'
-  for (const input of inputsForm.inputs) {
+
+  await Promise.all(inputsForm.inputs.map(async (input) => {
     input.objectId = (await he.upload(input.value)).id
-  }
+  }))
   clearExecutionData()
+
   resultId.value = ''
   decryptedResult.value = ''
   status.value = 'Encrypted inputs uploaded.'
@@ -136,6 +138,7 @@ async function executeExpression(): Promise<void> {
   const logic = JSON.parse(executionForm.expression)
   requestedExecution.value = { inputs: inputMap, logic }
   clearExecutionData()
+
   status.value = 'Evaluating and decrypting the result…'
   await runExecution()
 

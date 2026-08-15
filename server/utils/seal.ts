@@ -1,17 +1,10 @@
-import initializeSEAL from 'node-seal/throws'
-import sealWasmModule from '../../node_modules/node-seal/dist/seal_throws.wasm?module'
+import SEAL from 'node-seal/throws'
 
-const sealPromise = initializeSEAL({
-  instantiateWasm(
-    imports: WebAssembly.Imports,
-    receiveInstance: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void
-  ) {
-    const instance = new WebAssembly.Instance(sealWasmModule, imports)
-    receiveInstance(instance, sealWasmModule)
-    return instance.exports
-  }
-})
+type Seal = Awaited<ReturnType<typeof SEAL>>
 
-export function getServerSEAL() {
-  return sealPromise
+let instance: Promise<Seal> | undefined
+
+export const getSeal = async (): Promise<Seal> => {
+  if (!instance) instance = SEAL()
+  return instance
 }

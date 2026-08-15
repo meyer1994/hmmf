@@ -1,9 +1,6 @@
 import { getRequestHeader, readRawBody, setResponseStatus } from 'h3'
 import { z } from 'zod'
-import {
-  HE_HEADERS,
-  type StoredCiphertextMetadata
-} from '~~/shared/he'
+import { HE_HEADERS } from '~~/shared/he'
 
 const headersSchema = z.object({
   scheme: z.literal('BFV'),
@@ -15,6 +12,8 @@ const headersSchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
+  console.log('[vars:upload] request received')
+
   const parameters = headersSchema.parse({
     scheme: getRequestHeader(event, HE_HEADERS.scheme),
     polyModulusDegree: getRequestHeader(event, HE_HEADERS.polyModulusDegree),
@@ -25,21 +24,23 @@ export default defineEventHandler(async (event) => {
   const body = await readRawBody(event, false)
   if (!body) throw createError({ statusCode: 400, statusMessage: 'Missing body' })
   const ciphertext = new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
+  console.log('[vars:upload] request validated', {
+    byteLength: ciphertext.byteLength,
+    parameters
+  })
 
   const id = crypto.randomUUID()
 
   const storage = useStorage('he')
-  await storage.setItemRaw(`objects:${id}:ciphertext.bin`, ciphertext)
-  await storage.setItem(`objects:${id}:metadata.json`, {
+  await storage.setItemRaw(`vars:${id}:ciphertext.bin`, ciphertext)
+  await storage.setMeta(`vars:${id}:ciphertext.bin`, {
     id,
     ...parameters,
     byteLength: ciphertext.byteLength,
     createdAt: new Date().toISOString()
   })
+  console.log('[vars:upload] ciphertext stored', { id })
 
   setResponseStatus(event, 201)
-  return {
-    id,
-    scheme: parameters.scheme
-  }
+  return { id, scheme: parameters.scheme }
 })

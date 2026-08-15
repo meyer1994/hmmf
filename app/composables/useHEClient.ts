@@ -5,7 +5,8 @@ import type {
   RelinKeys,
   SecretKey
 } from 'node-seal'
-import { getClientSEAL } from '~/utils/seal'
+import SEAL from 'node-seal/throws'
+
 import {
   parameterHeaders,
   type ExecuteRequest,
@@ -15,6 +16,8 @@ import {
   type ObjectReference
 } from '~~/shared/he'
 import { HEClient } from '~~/shared/he-client'
+
+const sealPromise = SEAL()
 
 interface ClientSession {
   createdAt: string
@@ -66,7 +69,7 @@ export function useHEClient() {
     descriptor: HERequestDescriptor
   }> {
     dispose()
-    const seal = await getClientSEAL()
+    const seal = await sealPromise
     const client = new HEClient({ seal, parameters }).init()
     const keyGenerator = new seal.KeyGenerator(client.context)
     const secretKey = keyGenerator.secretKey()

@@ -15,9 +15,31 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: 'cloudflare_module',
+    cloudflare: {
+      deployConfig: true,
+      wrangler: {
+        r2_buckets: [
+          {
+            binding: 'HE_OBJECTS',
+            bucket_name: 'hmmf'
+          }
+        ],
+        observability: {
+          enabled: true
+        }
+      }
+    },
+
     experimental: {
       wasm: true
     },
+
+    routeRules: {
+      '/**/*.wasm': {
+        headers: { 'Content-Type': 'application/wasm' }
+      }
+    },
+
     storage: {
       he: {
         driver: 'cloudflare-r2-binding',
@@ -30,6 +52,12 @@ export default defineNuxtConfig({
         driver: 'fs',
         base: './.data/he'
       }
+    }
+  },
+
+  vite: {
+    optimizeDeps: {
+      exclude: ['node-seal']
     }
   },
 
