@@ -23,6 +23,22 @@ useHead({
       </template>
 
       <template #right>
+        <UButton
+          to="/"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-house"
+        >
+          Home
+        </UButton>
+        <UButton
+          to="/demo"
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-flask-conical"
+        >
+          Demo
+        </UButton>
         <UBadge
           color="neutral"
           variant="subtle"

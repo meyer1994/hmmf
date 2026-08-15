@@ -22,10 +22,14 @@ const logicSchema: z.ZodType<Logic> = z.lazy(() => z.union([
 ]))
 
 const executeSchema = z.object({
-  inputs: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/), z.uuid()),
+  inputs: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/), z.uuid()).refine(
+    inputs => Object.keys(inputs).length > 0,
+    'At least one input is required.'
+  ),
   logic: logicSchema,
-  relinKeys: z.string().optional()
-})
+  relinKeys: z.string()
+    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/, 'Relinearization keys must be base64 encoded.')
+}).strict()
 
 export default defineEventHandler(async (event) => {
   let engine: HEEngine | undefined
@@ -46,7 +50,7 @@ export default defineEventHandler(async (event) => {
     })
 
     engine = new HEEngine(await getSeal(), parameters)
-    if (request.relinKeys) engine.loadRelinKeys(decodeBase64(request.relinKeys))
+    engine.loadRelinKeys(decodeBase64(request.relinKeys))
 
     const storage = useStorage('he')
     const entries = await Promise.all(Object.entries(request.inputs).map(async ([name, id]) => {
