@@ -1,14 +1,9 @@
-import { getRequestHeader, readBody, setResponseStatus } from 'h3'
+import { getRequestHeader, setResponseStatus } from 'h3'
 import initializeSEAL from 'node-seal/throws'
 import { z } from 'zod'
-import sealWasmModule from '../../../node_modules/node-seal/dist/seal_throws.wasm?module'
-import {
-  HE_HEADERS,
-  canonicalizeParameters,
-  sha256Fingerprint,
-  type StoredCiphertextMetadata
-} from '~~/shared/he'
 import { HEEngine, type Logic } from '~~/server/utils/he-engine'
+import { HE_HEADERS, canonicalizeParameters, sha256Fingerprint } from '~~/shared/he'
+import sealWasmModule from '../../../node_modules/node-seal/dist/seal_throws.wasm?module'
 
 const headersSchema = z.object({
   scheme: z.literal('BFV'),

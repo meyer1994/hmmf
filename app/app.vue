@@ -10,14 +10,23 @@ useHead({
   <UApp>
     <UHeader>
       <template #left>
-        <NuxtLink to="/" class="flex items-center gap-2 font-semibold text-highlighted">
-          <UIcon name="i-lucide-binary" class="size-5 text-primary" />
+        <NuxtLink
+          to="/"
+          class="flex items-center gap-2 font-semibold text-highlighted"
+        >
+          <UIcon
+            name="i-lucide-binary"
+            class="size-5 text-primary"
+          />
           HMMF
         </NuxtLink>
       </template>
 
       <template #right>
-        <UBadge color="neutral" variant="subtle">
+        <UBadge
+          color="neutral"
+          variant="subtle"
+        >
           Client-held keys
         </UBadge>
         <UColorModeButton />

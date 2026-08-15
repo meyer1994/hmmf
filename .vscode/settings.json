@@ -1,7 +1,8 @@
 {
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
+    "source.fixAll.eslint": "always",
+    "source.organizeImports": "always",
   },
   "eslint.useFlatConfig": true,
   "eslint.validate": [
@@ -12,6 +13,6 @@
     "vue"
   ],
   "[javascript][javascriptreact][typescript][typescriptreact][vue]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
   }
 }
