@@ -40,7 +40,7 @@ All endpoints use capability-style UUID object IDs and currently have no authent
 
 ### Upload a ciphertext
 
-`POST /api/v1/objects` accepts `application/octet-stream` plus these headers:
+`POST /api/v1/vars` accepts `application/octet-stream` plus these headers:
 
 - `X-HE-Scheme: BFV`
 - `X-HE-Poly-Modulus-Degree: 4096` or `8192`
@@ -83,7 +83,7 @@ Zod validates the request shape and recursive operator allowlist before the publ
 
 ### Download a ciphertext
 
-`GET /api/v1/objects/:id` returns `application/octet-stream` and HE metadata headers. Decryption remains client-side.
+`GET /api/v1/vars/:id` returns `application/octet-stream` and HE metadata headers. Decryption remains client-side.
 
 ## Verification
 

@@ -172,7 +172,7 @@ export function useHEClient() {
   async function upload(value: string): Promise<ObjectReference> {
     const active = requireSession()
     const ciphertext = encrypt(value)
-    const response = await fetch('/api/v1/objects', {
+    const response = await fetch('/api/v1/vars', {
       method: 'POST',
       headers: {
         ...parameterHeaders(active.descriptor),
@@ -210,7 +210,7 @@ export function useHEClient() {
 
   async function downloadAndDecrypt(id: string): Promise<bigint> {
     const active = requireSession()
-    const response = await fetch(`/api/v1/objects/${encodeURIComponent(id)}`)
+    const response = await fetch(`/api/v1/vars/${encodeURIComponent(id)}`)
     if (!response.ok) {
       throw await responseError(response)
     }
