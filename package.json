@@ -17,7 +17,7 @@
     "@nuxt/ui": "^4.10.0",
     "json-logic-js": "^2.0.5",
     "node-seal": "^5.1.6",
-    "nuxt": "^4.5.2",
+    "nuxt": "^4.6.2",
     "tailwindcss": "^4.3.3",
     "zod": "^4.4.3"
   },
